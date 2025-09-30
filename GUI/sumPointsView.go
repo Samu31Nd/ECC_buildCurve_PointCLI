@@ -6,7 +6,6 @@ import (
 	equationcomponent "puntosCurvaEliptica/GUI/components/EquationComponent"
 	minicheckcomponent "puntosCurvaEliptica/GUI/components/MiniCheckComponent"
 	pointcomponent "puntosCurvaEliptica/GUI/components/PointComponent"
-	rightview "puntosCurvaEliptica/GUI/components/rightView"
 	mathcurve "puntosCurvaEliptica/MathCurve"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -45,17 +44,17 @@ var (
 )
 
 type SumPointsModel struct {
-	eqComp         equationcomponent.Model
-	p1, p2         pointcomponent.Model
-	checkInput     minicheckcomponent.Model
-	proceed        bool
-	finalPoint     mathcurve.Point
-	focusedInput   int
-	exit           bool
-	globalError    error
-	rightView      bool
-	rightComponent rightview.Model
-	width, height  int
+	eqComp       equationcomponent.Model
+	p1, p2       pointcomponent.Model
+	checkInput   minicheckcomponent.Model
+	proceed      bool
+	finalPoint   mathcurve.Point
+	focusedInput int
+	exit         bool
+	globalError  error
+	rightView    bool
+	//rightComponent rightview.Model
+	width, height int
 }
 
 func (m SumPointsModel) Init() tea.Cmd {
@@ -64,7 +63,7 @@ func (m SumPointsModel) Init() tea.Cmd {
 
 func (m SumPointsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd = make([]tea.Cmd, 5)
-	var err, customMsgRight bool
+	var err bool
 	var errorValue error
 
 	if m.checkInput.Check {
@@ -98,7 +97,7 @@ func (m SumPointsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.eqComp.A,
 					m.eqComp.P,
 				)
-				m.rightComponent.P = m.eqComp.P
+				//m.rightComponent.P = m.eqComp.P
 				if errorValue != nil {
 					err = true
 					m.globalError = errorValue
@@ -151,9 +150,9 @@ func (m SumPointsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.p1, cmds[1] = m.p1.Update(msg)
 	m.checkInput, cmds[2] = m.checkInput.Update(msg)
 	m.p2, cmds[3] = m.p2.Update(msg)
-	if !customMsgRight {
-		m.rightComponent, cmds[4] = m.rightComponent.Update(msg)
-	}
+	//if !customMsgRight {
+	//	m.rightComponent, cmds[4] = m.rightComponent.Update(msg)
+	//}
 	return m, tea.Batch(cmds...)
 }
 
@@ -213,18 +212,18 @@ func (m SumPointsModel) View() string {
 			points,
 			proceedText,
 			err,
-		)), rightWindowStyle.Render(m.rightComponent.View()),
+		)), /*rightWindowStyle.Render(m.rightComponent.View()),*/
 	)
 }
 
 func InitialModel() SumPointsModel {
 	return SumPointsModel{
-		eqComp:         equationcomponent.NewEqModel(),
-		p1:             pointcomponent.NewPointModel(),
-		p2:             pointcomponent.NewPointModel(),
-		rightComponent: rightview.InitialModel(),
-		checkInput:     minicheckcomponent.NewCheckModel("P1 es igual a P2?"),
-		focusedInput:   eqView,
+		eqComp: equationcomponent.NewEqModel(),
+		p1:     pointcomponent.NewPointModel(),
+		p2:     pointcomponent.NewPointModel(),
+		//rightComponent: rightview.InitialModel(),
+		checkInput:   minicheckcomponent.NewCheckModel("P1 es igual a P2?"),
+		focusedInput: eqView,
 	}
 }
 
