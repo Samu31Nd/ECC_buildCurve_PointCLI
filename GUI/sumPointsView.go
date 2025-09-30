@@ -6,6 +6,8 @@ import (
 	equationcomponent "puntosCurvaEliptica/GUI/components/EquationComponent"
 	minicheckcomponent "puntosCurvaEliptica/GUI/components/MiniCheckComponent"
 	pointcomponent "puntosCurvaEliptica/GUI/components/PointComponent"
+	rightview "puntosCurvaEliptica/GUI/components/rightView"
+	mathcurve "puntosCurvaEliptica/MathCurve"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,6 +19,12 @@ const (
 	p1View
 	checkView
 	p2View
+	proceedView
+)
+
+const (
+	leftView = iota
+	rightView
 )
 
 var (
@@ -30,17 +38,24 @@ var (
 			Foreground(lipgloss.Color("1")).
 			Bold(true)
 
-	noErrorText = lipgloss.NewStyle().Foreground(lipgloss.Color("242")).Italic(true).Render("No errors found (yet...)")
-	helpText    = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("Help:")
+	noErrorText      = lipgloss.NewStyle().Foreground(lipgloss.Color("242")).Italic(true).Render("No errors found (yet...)")
+	helpText         = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("Help:")
+	leftWindowStyle  = lipgloss.NewStyle()
+	rightWindowStyle = lipgloss.NewStyle()
 )
 
 type SumPointsModel struct {
-	eqComp       equationcomponent.Model
-	p1, p2       pointcomponent.Model
-	checkInput   minicheckcomponent.Model
-	focusedInput int
-	exit         bool
-	globalError  error
+	eqComp         equationcomponent.Model
+	p1, p2         pointcomponent.Model
+	checkInput     minicheckcomponent.Model
+	proceed        bool
+	finalPoint     mathcurve.Point
+	focusedInput   int
+	exit           bool
+	globalError    error
+	rightView      bool
+	rightComponent rightview.Model
+	width, height  int
 }
 
 func (m SumPointsModel) Init() tea.Cmd {
@@ -48,15 +63,48 @@ func (m SumPointsModel) Init() tea.Cmd {
 }
 
 func (m SumPointsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd = make([]tea.Cmd, 4)
+	var cmds []tea.Cmd = make([]tea.Cmd, 5)
+	var err, customMsgRight bool
+	var errorValue error
+
 	if m.checkInput.Check {
 		m.p2.Inputs[0].SetValue(m.p1.Inputs[0].Value())
 		m.p2.Inputs[1].SetValue(m.p1.Inputs[1].Value())
 	}
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		leftWindowStyle = leftWindowStyle.Height(msg.Height / 2).Width(msg.Width / 2)
+		rightWindowStyle = rightWindowStyle.Height(msg.Height / 2).Width(msg.Height / 2)
+
 	case tea.KeyMsg:
+		switch msg.String() {
+		case "e":
+			m.rightView = false
+		case "p", "g":
+			m.rightView = true
+		}
+		if m.rightView {
+			break
+		}
 		switch msg.Type {
+		case tea.KeyEnter:
+			if m.focusedInput == proceedView {
+				m.finalPoint, errorValue = mathcurve.AddPoints(
+					m.p1.X, m.p1.Y,
+					m.p2.X, m.p2.Y,
+					m.eqComp.A,
+					m.eqComp.P,
+				)
+				m.rightComponent.P = m.eqComp.P
+				if errorValue != nil {
+					err = true
+					m.globalError = errorValue
+				}
+				m.proceed = true
+			}
 		case tea.KeyCtrlC, tea.KeyEsc:
 			m.exit = true
 			return m, tea.Quit
@@ -79,8 +127,6 @@ func (m SumPointsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.FocusActualInput()
 	}
-
-	var err bool
 
 	for inputs := range 4 {
 		switch inputs {
@@ -105,6 +151,9 @@ func (m SumPointsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.p1, cmds[1] = m.p1.Update(msg)
 	m.checkInput, cmds[2] = m.checkInput.Update(msg)
 	m.p2, cmds[3] = m.p2.Update(msg)
+	if !customMsgRight {
+		m.rightComponent, cmds[4] = m.rightComponent.Update(msg)
+	}
 	return m, tea.Batch(cmds...)
 }
 
@@ -114,6 +163,18 @@ func (m SumPointsModel) View() string {
 	}
 
 	var points string
+
+	var proceedText string = lipgloss.NewStyle().
+		Bold(true).
+		Render("[ Calcular suma de puntos ]")
+
+	if !(m.focusedInput == proceedView) {
+		proceedText = "[ Calcular suma de puntos ]"
+	}
+
+	if m.proceed {
+		proceedText += fmt.Sprintf("\n  Punto R: {%d, %d}", m.finalPoint.X, m.finalPoint.Y)
+	}
 
 	if m.eqComp.ValidPoints != nil {
 		for i, p := range m.eqComp.ValidPoints {
@@ -126,8 +187,9 @@ func (m SumPointsModel) View() string {
 		err = "Error: " + errorStyle.Render(m.globalError.Error())
 	}
 
-	return fmt.Sprintf(
-		`
+	return lipgloss.JoinHorizontal(lipgloss.Left,
+		leftWindowStyle.Render(fmt.Sprintf(
+			`
   %s
 
   %s
@@ -140,24 +202,29 @@ func (m SumPointsModel) View() string {
   %s
 
   %s
+
+  %s
 		`,
-		titleStyle.Render("Practica 2 - Suma de puntos"),
-		m.eqComp.View(),
-		m.p1.View(),
-		m.checkInput.View(),
-		m.p2.View(),
-		points,
-		err,
+			titleStyle.Render("Practica 2 - Suma de puntos"),
+			m.eqComp.View(),
+			m.p1.View(),
+			m.checkInput.View(),
+			m.p2.View(),
+			points,
+			proceedText,
+			err,
+		)), rightWindowStyle.Render(m.rightComponent.View()),
 	)
 }
 
 func InitialModel() SumPointsModel {
 	return SumPointsModel{
-		eqComp:       equationcomponent.NewEqModel(),
-		p1:           pointcomponent.NewPointModel(),
-		p2:           pointcomponent.NewPointModel(),
-		checkInput:   minicheckcomponent.NewCheckModel("P1 es igual a P2?"),
-		focusedInput: eqView,
+		eqComp:         equationcomponent.NewEqModel(),
+		p1:             pointcomponent.NewPointModel(),
+		p2:             pointcomponent.NewPointModel(),
+		rightComponent: rightview.InitialModel(),
+		checkInput:     minicheckcomponent.NewCheckModel("P1 es igual a P2?"),
+		focusedInput:   eqView,
 	}
 }
 
@@ -170,7 +237,7 @@ func StartProgramEquation() {
 }
 
 func (m *SumPointsModel) nextInput() {
-	m.focusedInput = (m.focusedInput + 1) % 4
+	m.focusedInput = (m.focusedInput + 1) % 5
 }
 
 // prevInput focuses the previous input field
@@ -178,7 +245,7 @@ func (m *SumPointsModel) prevInput() {
 	m.focusedInput--
 	// Wrap around
 	if m.focusedInput < 0 {
-		m.focusedInput = 4 - 1
+		m.focusedInput = 4
 	}
 }
 

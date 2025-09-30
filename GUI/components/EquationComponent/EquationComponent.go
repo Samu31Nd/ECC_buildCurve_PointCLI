@@ -27,9 +27,10 @@ func primeValidator(s string) error {
 		return fmt.Errorf("%d (%s) no es un numero primo", n, s)
 	}
 	// Checar que cumpla p == 3 (mod 4)
-	if (n % 4) != 3 {
-		return fmt.Errorf("el numero primo no cumple p ≡ 3 (mod 4) | p ≡ %d (mod 4)", n%4)
-	}
+	// no siempre aplica
+	// if (n % 4) != 3 {
+	// 	return fmt.Errorf("el numero primo no cumple p ≡ 3 (mod 4) | p ≡ %d (mod 4)", n%4)
+	// }
 	GlobalPValue = n
 	return nil
 }
@@ -122,10 +123,12 @@ func (m *Model) IsValidCurve() error {
 	if m.negA {
 		a = a * (-1)
 	}
+	m.A = a
 	b, _ := strconv.Atoi(m.Inputs[inputB].Value())
 	if m.negB {
 		b = b * (-1)
 	}
+	m.B = b
 	delta := int((4*math.Pow(float64(a), 3) + 27*math.Pow(float64(b), 2))) % GlobalPValue
 	if delta == 0 {
 		return fmt.Errorf("la ecuacion tiene singularidades, valor de delta = %d", delta)
@@ -133,6 +136,7 @@ func (m *Model) IsValidCurve() error {
 
 	// CONSEGUIR LOS PUNTOS DE LA CURVA Y GUARDARLOS
 	m.ValidPoints = GetPoints(a, b, GlobalPValue)
+	m.P = GlobalPValue
 	return nil
 }
 

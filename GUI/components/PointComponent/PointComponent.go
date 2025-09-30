@@ -181,5 +181,9 @@ func (m *Model) Blur() {
 	for i := range m.Inputs {
 		m.Inputs[i].Blur()
 	}
+	X, _ := strconv.Atoi(m.Inputs[inputX].Value())
+	Y, _ := strconv.Atoi(m.Inputs[inputX].Value())
+	m.X = X
+	m.Y = Y
 	m.Focused = false
 }

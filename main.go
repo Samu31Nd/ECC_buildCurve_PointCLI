@@ -1,9 +1,10 @@
 package main
 
 import (
-	gui "puntosCurvaEliptica/GUI"
+	rightview "puntosCurvaEliptica/GUI/components/rightView"
 )
 
 func main() {
-	gui.StartProgramEquation()
+	//gui.StartProgramEquation()
+	rightview.TrySeeTable()
 }
