@@ -144,6 +144,8 @@ func NewPointModel() Model {
 		Inputs:       inputs,
 		Focused:      false,
 		focusedInput: inputX,
+		X:            -1,
+		Y:            -1,
 	}
 }
 
@@ -182,7 +184,7 @@ func (m *Model) Blur() {
 		m.Inputs[i].Blur()
 	}
 	X, _ := strconv.Atoi(m.Inputs[inputX].Value())
-	Y, _ := strconv.Atoi(m.Inputs[inputX].Value())
+	Y, _ := strconv.Atoi(m.Inputs[inputY].Value())
 	m.X = X
 	m.Y = Y
 	m.Focused = false

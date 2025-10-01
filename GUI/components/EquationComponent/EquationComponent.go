@@ -26,11 +26,6 @@ func primeValidator(s string) error {
 	if !isPrime(n) {
 		return fmt.Errorf("%d (%s) no es un numero primo", n, s)
 	}
-	// Checar que cumpla p == 3 (mod 4)
-	// no siempre aplica
-	// if (n % 4) != 3 {
-	// 	return fmt.Errorf("el numero primo no cumple p ≡ 3 (mod 4) | p ≡ %d (mod 4)", n%4)
-	// }
 	GlobalPValue = n
 	return nil
 }

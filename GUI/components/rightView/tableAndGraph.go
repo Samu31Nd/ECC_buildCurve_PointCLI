@@ -1,7 +1,5 @@
 package rightview
 
-// TODO: QUITENLE LA FUNCION INIT Y USENLO COMO COMPONENTE CON SUS DEFAULTS COMO LOS DEMAS COMPONENTES
-
 import (
 	"fmt"
 	mathcurve "puntosCurvaEliptica/MathCurve"
@@ -56,10 +54,11 @@ var (
 type Model struct {
 	activeTab       int
 	Focused         bool
+	exit            bool
 	Width, Height   int
 	pointsTableComp table.Model
 	// for graphView
-	notGraph       bool
+	graphIsReady   bool
 	P              int
 	selectedPoints [2]mathcurve.Point
 	finalPoint     mathcurve.Point
@@ -67,8 +66,9 @@ type Model struct {
 }
 
 type PointMsg struct {
-	point mathcurve.Point
-	index int
+	Point        mathcurve.Point
+	IsP1SameAsP2 bool
+	Index        int
 }
 
 type CustomSizeMsg struct {
@@ -76,112 +76,139 @@ type CustomSizeMsg struct {
 }
 
 type NewValuesTableMsg struct {
-	points []mathcurve.Point
+	Points []mathcurve.Point
 }
 
 //func (m Model) Init() tea.Cmd { return nil }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	var cmds []tea.Cmd = make([]tea.Cmd, 2)
-
-	reDrawCanvas := false
+	var cmds []tea.Cmd = make([]tea.Cmd, 1)
 
 	switch msg := msg.(type) {
 	case PointMsg:
-		reDrawCanvas = true
-		m.finalPoint = mathcurve.Point{X: -1}
-		//Update
-		if msg.index == 2 {
-			m.finalPoint = msg.point
-		} else {
-			m.selectedPoints[msg.index] = msg.point
+		switch msg.Index {
+		case 0:
+			m.selectedPoints[0] = msg.Point
+			if msg.IsP1SameAsP2 {
+				m.selectedPoints[1] = msg.Point
+			}
+		case 1:
+			if !msg.IsP1SameAsP2 {
+				m.selectedPoints[1] = msg.Point
+			}
+		case 2:
+			m.finalPoint = msg.Point
+		}
+		if m.graphIsReady {
+			m.graphComp.Resize(m.Width-4, m.Height)
+			m.graphComp.Clear()
+			m.graphComp.DrawXYAxisAndLabel()
+			for _, p := range m.selectedPoints {
+				if p.X == -1 {
+					continue
+				}
+				pointToDraw := canvas.Float64Point{X: float64(p.X), Y: float64(p.Y)}
+				m.graphComp.DrawRune(pointToDraw, 'X')
+			}
+
+			if m.finalPoint.X != -1 {
+				pointToDraw := canvas.Float64Point{X: float64(m.finalPoint.X), Y: float64(m.finalPoint.Y)}
+				m.graphComp.DrawRune(pointToDraw, 'O')
+
+			}
 		}
 	case NewValuesTableMsg:
-		rows := make([]table.Row, len(msg.points))
-		for i, pt := range msg.points {
+		rows := make([]table.Row, len(msg.Points))
+		for i, pt := range msg.Points {
 			rows[i] = table.Row{
-				fmt.Sprintf("%d", i),    // Index
-				fmt.Sprintf("%d", pt.X), // X
-				fmt.Sprintf("%d", pt.Y), // Y
+				fmt.Sprintf("%d", i),      // Index
+				fmt.Sprintf("{ %d", pt.X), // X
+				",  ",                     // X
+				fmt.Sprintf("%d }", pt.Y), // Y
 			}
 		}
 		m.pointsTableComp.SetRows(rows)
-	case tea.WindowSizeMsg:
-		m.Width = msg.Width / 2
-		m.graphComp.Resize(msg.Width-4, msg.Height-10)
-		m.Height = 2 * msg.Height / 3
+		//at this point surely m.P is defined, so lets create a new Graph
+		//CREATE AND REDRAW ENTIRE GRAPH WITHOUT POINTS
+		{
+			m.graphIsReady = true
+			m.graphComp = linechart.New(
+				0, 0,
+				0, float64(m.P),
+				0, float64(m.P),
+				linechart.WithXYSteps(1, 1),
+				linechart.WithStyles(axisStyle, labelStyle, graphStyle),
+			)
+			m.graphComp.Resize(m.Width-4, m.Height)
+			m.graphComp.Clear()
+			m.graphComp.DrawXYAxisAndLabel()
+		}
 	case CustomSizeMsg:
-		m.graphComp.Resize(msg.Width-10, msg.Height-10)
 		m.Width = msg.Width
-		m.Height = msg.Height
+		m.Height = msg.Height / 2
+		//REDRAW GRAPH
+		{
+			if m.graphIsReady {
+				m.graphComp.Resize(m.Width-4, m.Height)
+				m.graphComp.Clear()
+				m.graphComp.DrawXYAxisAndLabel()
+				for _, p := range m.selectedPoints {
+					if p.X == -1 {
+						continue
+					}
+					pointToDraw := canvas.Float64Point{X: float64(p.X), Y: float64(p.Y)}
+					m.graphComp.DrawRune(pointToDraw, 'X')
+				}
+
+				if m.finalPoint.X != -1 {
+					pointToDraw := canvas.Float64Point{X: float64(m.finalPoint.X), Y: float64(m.finalPoint.Y)}
+					m.graphComp.DrawRune(pointToDraw, 'O')
+
+				}
+			}
+		}
 	case tea.KeyMsg:
 		if !m.Focused {
-			break
-		} // ignore input
+			return m, nil
+		}
+		switch msg.Type {
+		case tea.KeyCtrlC:
+			m.exit = true
+			m.Focused = false
+			return m, tea.Quit
+		}
 		switch msg.String() {
 		case "e":
 			m.Focused = false
+			m.pointsTableComp.Blur()
 		case "g":
 			m.Focused = true
-			reDrawCanvas = true
 			m.pointsTableComp.Blur()
 			m.activeTab = graphView
-
 		case "p":
 			m.Focused = true
 			m.pointsTableComp.Focus()
 			m.activeTab = tableView
 		case "q", "ctrl+c":
 			return m, tea.Quit
-		case "enter":
-			// handle view in graph
-			return m, tea.Batch(
-				tea.Printf("Let's go to %s!", m.pointsTableComp.SelectedRow()[1]),
-			)
 		}
 	}
-
-	if reDrawCanvas {
-		m.notGraph = false
-		m.graphComp = linechart.New(
-			m.Width-6, m.Height-6,
-			0, float64(m.P-1),
-			0, float64(m.P-1),
-			linechart.WithXYSteps(1, 1),
-			linechart.WithStyles(axisStyle, labelStyle, graphStyle),
-		)
-		m.graphComp.DrawXYAxisAndLabel()
-
-		//dibujar los 2 puntos
-		for _, point := range m.selectedPoints {
-			ptCanva := canvas.Float64Point{
-				X: float64(point.X),
-				Y: float64(point.Y),
-			}
-			m.graphComp.DrawRune(ptCanva, '●')
-		}
-		if m.finalPoint.X != -1 {
-			ptCanva := canvas.Float64Point{
-				X: float64(m.finalPoint.X),
-				Y: float64(m.finalPoint.Y),
-			}
-			m.graphComp.DrawRune(ptCanva, '◎')
-		}
-	}
-
 	m.pointsTableComp, cmds[0] = m.pointsTableComp.Update(msg)
-	m.graphComp, cmds[1] = m.graphComp.Update(msg)
+	if m.graphIsReady {
+		var cmd tea.Cmd
+		m.graphComp, cmd = m.graphComp.Update(msg)
+		cmds = append(cmds, cmd)
+	}
+
 	return m, tea.Batch(cmds...)
 }
 
-func (m Model) View() string {
-	viewport := strings.Builder{}
-
+func drawTabs(width, activeTab int) string {
 	var renderedTabs []string
 
 	for i, t := range Tabs {
 		var style lipgloss.Style
-		isFirst, isLast, isActive := i == 0, i == len(Tabs)-1, i == m.activeTab
+		isFirst, isLast, isActive := i == 0, i == len(Tabs)-1, i == activeTab
 		if isActive {
 			style = activeTabStyle
 		} else {
@@ -202,18 +229,27 @@ func (m Model) View() string {
 	}
 
 	row := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
-	row += lipgloss.NewStyle().Foreground(highlightColor).Render(strings.Repeat("─", m.Width+1-lipgloss.Width(row)) + "╮")
-	viewport.WriteString(row)
-	viewport.WriteString("\n")
+	row += lipgloss.NewStyle().Foreground(highlightColor).Render(strings.Repeat("─", width+1-lipgloss.Width(row)) + "╮")
+
+	return row
+}
+
+func (m Model) View() string {
+	if m.exit {
+		return ""
+	}
+	viewport := strings.Builder{}
+	viewport.WriteString(drawTabs(m.Width, m.activeTab) + "\n")
 
 	switch m.activeTab {
 	case tableView:
+		//viewport.WriteString(windowStyle.Width(m.Width).Height(m.Height).Render(baseStyle.Render(strings.Repeat("a", 100))))
 		viewport.WriteString(windowStyle.Width(m.Width).Height(m.Height).Render(baseStyle.Render(m.pointsTableComp.View())))
 	case graphView:
-		if m.notGraph {
-			viewport.WriteString(windowStyle.Width(m.Width).Height(m.Height).Render("Add some points dude"))
-		} else {
+		if m.graphIsReady {
 			viewport.WriteString(windowStyle.Width(m.Width).Height(m.Height).Render(m.graphComp.View()))
+		} else {
+			viewport.WriteString(windowStyle.Width(m.Width).Height(m.Height).Render("Insert P value to see the graph"))
 		}
 	}
 
@@ -224,6 +260,7 @@ func InitialModel() Model {
 	columns := []table.Column{
 		{Title: "n", Width: 5},
 		{Title: "X", Width: 8},
+		{Title: "", Width: 3},
 		{Title: "Y", Width: 8},
 	}
 
@@ -247,10 +284,16 @@ func InitialModel() Model {
 
 	return Model{
 		activeTab:       tableView,
-		Focused:         false, //TODO: Turn this to false
+		Focused:         false,
 		pointsTableComp: t,
 		Width:           45,
-		Height:          30,
+		Height:          20,
+		finalPoint:      mathcurve.Point{X: -1, Y: -1},
+		selectedPoints: [2]mathcurve.Point{
+			{X: -1, Y: -1},
+			{X: -1, Y: -1},
+		},
+		graphIsReady: false,
 	}
 }
 
@@ -301,22 +344,30 @@ func TestInitialModel(allPoints []mathcurve.Point, selectedPoints [2]mathcurve.P
 	}
 }
 
+func (m *Model) Focus(input string) {
+	switch input {
+	case "g":
+		m.graphComp.Focus()
+	case "p":
+		m.pointsTableComp.Focus()
+	}
+	m.Focused = true
+}
+
+func (m *Model) Blur() {
+	switch m.activeTab {
+	case graphView:
+		m.graphComp.Focus()
+	case tableView:
+		m.pointsTableComp.Focus()
+	}
+
+	m.Focused = false
+}
+
 // func TrySeeTable() {
-// 	points := []mathcurve.Point{
-// 		{X: 0, Y: 4},
-// 		{X: 1, Y: 4},
-// 		{X: 2, Y: 4},
-// 	}
 
-// 	pointsGraph := [2]mathcurve.Point{
-// 		{X: 0, Y: 4},
-// 		{X: 1, Y: 4},
-// 	}
-
-// 	finalPoint := mathcurve.Point{
-// 		X: 5, Y: 5,
-// 	}
-// 	p := tea.NewProgram(TestInitialModel(points, pointsGraph, finalPoint, 11))
+// 	p := tea.NewProgram(InitialModel())
 
 // 	if _, err := p.Run(); err != nil {
 // 		log.Fatal(err)
